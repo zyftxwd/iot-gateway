@@ -57,6 +57,13 @@ backend/uploads/
 reports/*
 !reports/.gitkeep
 
+# Internal publishing notes and one-off repository helper scripts.
+docs/github-publish.md
+docs/gitee-publish.md
+docs/open-source-boundary.md
+scripts/publish-gitee.ps1
+scripts/rename-gitee-repo.ps1
+
 # Local simulator state
 mqtt-test/.cache/
 opcua-test/.cache/

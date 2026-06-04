@@ -2,6 +2,8 @@
 
 工业通讯管理平台。当前版本面向工业网关、设备点表、实时采集、报警闭环、工单流转、维修资料归档和报表分析场景。
 
+> 许可证提示：本仓库源码仅允许学习、研究、内部评估和非商业演示。未经作者书面授权，严禁商用、二次售卖、商业部署、SaaS 托管和改名打包销售。
+
 ## 页面预览
 
 ### 项目设备点表
@@ -77,19 +79,119 @@ iot-gateway/
   .env.example          环境变量示例
 ```
 
-当前统一目录通过目录链接指向原始源码目录：
+## 环境要求
 
-```text
-backend  -> E:\java\iiotbackend
-frontend -> E:\java\iotweb\iiot-frontend
+本项目包含 Java 后端、Vue 前端和 MySQL 数据库。首次运行前需要安装：
+
+| 软件 | 建议版本 | 用途 |
+| --- | --- | --- |
+| JDK | 1.8 | 运行 Spring Boot 后端 |
+| Maven | 3.8+ | 下载依赖、启动后端 |
+| MySQL | 8.0 | 存储设备、点表、报警、工单和历史数据 |
+| Node.js | 18+ | 运行前端开发环境 |
+| npm | 9+ | 安装前端依赖 |
+| Git | 2.40+ | 拉取代码、版本管理 |
+
+下面命令中的 `C:\path\to\iot-gateway` 需要替换为你本机实际项目目录。
+
+确认命令：
+
+```powershell
+java -version
+mvn -v
+mysql --version
+node -v
+npm -v
+git --version
 ```
 
-## 本地启动
+## 数据库初始化
+
+后端默认连接：
+
+```text
+数据库：iiot_db
+地址：127.0.0.1:3306
+账号：root
+密码：root
+```
+
+配置文件位置：
+
+```text
+backend/src/main/resources/application.yml
+```
+
+创建数据库并导入表结构：
+
+```powershell
+cd C:\path\to\iot-gateway
+mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS iiot_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+$sqlFiles = Get-ChildItem .\backend\docs\sql\*.sql | Sort-Object Name
+foreach ($file in $sqlFiles) {
+  Get-Content $file.FullName -Raw | mysql -uroot -proot --default-character-set=utf8mb4 iiot_db
+}
+```
+
+如果你的 MySQL 密码不是 `root`，把命令里的 `-proot` 改成自己的密码，例如 `-p你的密码`。
+
+如果 PowerShell 提示 `mysql` 不是可识别命令，需要把 MySQL 的 `bin` 目录加入系统环境变量 `PATH`，例如 `C:\Program Files\MySQL\MySQL Server 8.0\bin`。
+
+## 前端启动
+
+首次启动需要安装依赖：
+
+```powershell
+cd C:\path\to\iot-gateway\frontend
+npm install
+```
+
+启动前端开发服务：
+
+```powershell
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+前端访问地址：
+
+```text
+http://127.0.0.1:5173
+```
+
+## 后端启动
+
+确认 MySQL 已启动并完成数据库初始化，然后执行：
+
+```powershell
+cd C:\path\to\iot-gateway\backend
+mvn spring-boot:run
+```
+
+后端访问地址：
+
+```text
+http://127.0.0.1:8080
+```
+
+Swagger 接口文档：
+
+```text
+http://127.0.0.1:8080/swagger-ui/index.html
+```
+
+默认账号：
+
+```text
+admin / 123456
+```
+
+## 一键开发启动
 
 进入项目根目录：
 
 ```powershell
-cd E:\java\iiot-gateway
+cd C:\path\to\iot-gateway
 ```
 
 启动前后端：
@@ -109,12 +211,6 @@ cd E:\java\iiot-gateway
 - 前端：http://127.0.0.1:5173
 - 后端：http://127.0.0.1:8080
 - Swagger：http://127.0.0.1:8080/swagger-ui/index.html
-
-默认账号：
-
-```text
-admin / 123456
-```
 
 ## 模拟器
 
@@ -172,6 +268,7 @@ admin / 123456
 - [系统架构](docs/architecture.md)
 - [协议能力和插件边界](docs/protocols.md)
 - [部署说明](docs/deployment.md)
+- [版本记录](CHANGELOG.md)
 
 ## 授权说明
 

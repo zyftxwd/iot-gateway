@@ -4,6 +4,12 @@ Copyright (c) 2026.
 
 This repository is published as a source-available community edition.
 
+Commercial use is strictly prohibited unless the project owner grants a separate written commercial license.
+
+## 中文说明：禁止商用
+
+本仓库源码仅允许学习、研究、内部技术评估和非商业演示。未经作者书面授权，严禁商用、二次售卖、商业部署、SaaS 托管、付费项目交付、集成服务、外包实施、改名打包销售或作为竞品平台的一部分使用。
+
 ## Permitted Use
 
 You may view, study, modify, and run this source code for:
@@ -20,6 +26,8 @@ Without a separate written commercial license, you may not:
 - sell this software or a derivative product
 - provide this software as a hosted commercial service
 - deploy it for paid customer production projects
+- deploy it for internal production operation in a commercial company
+- use it to deliver paid engineering, integration, maintenance, consulting, or outsourcing services
 - remove or bypass license checks
 - repackage the project as a competing commercial platform
 - use reserved commercial modules, private plugins, private deployment scripts, customer-specific templates, or branding assets

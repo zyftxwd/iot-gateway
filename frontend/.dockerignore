@@ -1,0 +1,6 @@
+node_modules
+dist
+.vscode
+*.log
+hierarchy-ui-check.png
+realtime-point-ui-check.png

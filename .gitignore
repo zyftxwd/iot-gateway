@@ -1,0 +1,66 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs and runtime output
+logs/
+*.log
+*.pid
+*.pid.lock
+*.tmp
+.tmp-*/
+tmp/
+temp/
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/wrapper/maven-wrapper.jar
+
+# Node / Vite
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Database and local runtime data
+*.sql.gz
+*.dump
+*.bak
+*.sqlite
+*.db
+iiot-license.json
+protocol-definitions.json
+backend/uploads/
+
+# Generated reports
+reports/*
+!reports/.gitkeep
+
+# Local simulator state
+mqtt-test/.cache/
+opcua-test/.cache/
+opcua-test/cp.txt
+
+# Local UI verification screenshots
+frontend/*-ui-check.png

@@ -1,0 +1,57 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: iiot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-iiot_db}
+      MYSQL_USER: ${MYSQL_USER:-iiot}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-iiot123456}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    ports:
+      - "3306:3306"
+    volumes:
+      - iiot_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: iiot-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-iiot_db}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-iiot}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-iiot123456}
+      IIOT_COLLECTOR_NODE_ID: ${IIOT_COLLECTOR_NODE_ID:-docker-dev}
+      IIOT_COLLECTOR_DISPATCH_RATE_MS: ${IIOT_COLLECTOR_DISPATCH_RATE_MS:-1000}
+      IIOT_COLLECTOR_POOL_SIZE: ${IIOT_COLLECTOR_POOL_SIZE:-8}
+      IIOT_COLLECTOR_QUEUE_CAPACITY: ${IIOT_COLLECTOR_QUEUE_CAPACITY:-2000}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: iiot-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  iiot_mysql_data:

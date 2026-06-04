@@ -175,6 +175,7 @@ admin / 123456
 - [协议能力和插件边界](docs/protocols.md)
 - [部署说明](docs/deployment.md)
 - [GitHub 发布说明](docs/github-publish.md)
+- [Gitee 发布说明](docs/gitee-publish.md)
 - [公开版本和保留能力边界](docs/open-source-boundary.md)
 
 ## 仓库名称建议

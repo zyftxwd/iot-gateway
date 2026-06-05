@@ -16,6 +16,7 @@ import com.iot.backend.mapper.SysRoleMapper;
 import com.iot.backend.mapper.SysUserMapper;
 import com.iot.backend.mapper.SysUserProjectMapper;
 import com.iot.backend.service.AuthService;
+import com.iot.backend.service.PasswordService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -47,6 +48,9 @@ public class AuthAdminController {
 
     @Autowired
     private AuthService authService;
+
+    @Autowired
+    private PasswordService passwordService;
 
     @GetMapping("/users")
     public Result<List<SysUser>> users(@RequestHeader(value = "Authorization", required = false) String authorization) {
@@ -98,10 +102,17 @@ public class AuthAdminController {
         SysUser user = new SysUser();
         user.setUsername(request.getUsername().trim());
         user.setNickName(request.getNickName());
-        user.setPassword(request.getPassword() == null || request.getPassword().length() == 0 ? "123456" : request.getPassword());
+        String password = request.getPassword() == null || request.getPassword().length() == 0 ? "ChangeMe123!" : request.getPassword();
+        Result<Boolean> passwordCheck = validatePassword(password);
+        if (passwordCheck.getCode() != 200) {
+            return Result.error(passwordCheck.getCode(), passwordCheck.getMsg());
+        }
+        user.setPassword(passwordService.hash(password));
         user.setDeptId(request.getDeptId());
         user.setRoleKey(roleKey);
         user.setStatus("ACTIVE");
+        user.setFailedLoginCount(0);
+        user.setPasswordChangedTime(System.currentTimeMillis());
         userMapper.insert(user);
         user.setPassword(null);
         return Result.success(user);
@@ -241,10 +252,14 @@ public class AuthAdminController {
             return Result.error(404, "账号不存在");
         }
         String password = request == null ? null : request.get("password");
-        if (password == null || password.trim().length() < 4) {
-            return Result.error(400, "新密码至少需要 4 位");
+        Result<Boolean> passwordCheck = validatePassword(password);
+        if (passwordCheck.getCode() != 200) {
+            return Result.error(passwordCheck.getCode(), passwordCheck.getMsg());
         }
-        target.setPassword(password.trim());
+        target.setPassword(passwordService.hash(password.trim()));
+        target.setFailedLoginCount(0);
+        target.setLockUntil(null);
+        target.setPasswordChangedTime(System.currentTimeMillis());
         return Result.success(userMapper.updateById(target) > 0);
     }
 
@@ -279,6 +294,19 @@ public class AuthAdminController {
             return false;
         }
         return roleMapper.selectCount(new LambdaQueryWrapper<SysRole>().eq(SysRole::getRoleKey, roleKey)) > 0;
+    }
+
+    private Result<Boolean> validatePassword(String password) {
+        if (password == null || password.trim().length() < 8) {
+            return Result.error(400, "新密码至少需要 8 位");
+        }
+        String trimmed = password.trim();
+        boolean hasLetter = trimmed.matches(".*[A-Za-z].*");
+        boolean hasDigit = trimmed.matches(".*\\d.*");
+        if (!hasLetter || !hasDigit) {
+            return Result.error(400, "新密码必须同时包含字母和数字");
+        }
+        return Result.success(true);
     }
 
     private Result<Boolean> requireAdmin(String authorization) {

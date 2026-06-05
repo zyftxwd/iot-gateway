@@ -39,14 +39,17 @@ SPRING_DATASOURCE_PASSWORD=root
 ```powershell
 cd C:\path\to\iot-gateway
 mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS iiot_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-
-$sqlFiles = Get-ChildItem .\backend\docs\sql\*.sql | Sort-Object Name
-foreach ($file in $sqlFiles) {
-  Get-Content $file.FullName -Raw | mysql -uroot -proot --default-character-set=utf8mb4 iiot_db
-}
 ```
 
 如果 PowerShell 提示 `mysql` 不是可识别命令，需要把 MySQL 的 `bin` 目录加入系统环境变量 `PATH`。
+
+表结构由后端启动时通过 Flyway 自动迁移：
+
+```text
+backend/src/main/resources/db/migration
+```
+
+已有旧数据库首次接入 Flyway 时以 `V12` 作为基线；新空数据库从 `V1` 开始自动建表并升级到最新版本。
 
 如果数据库账号或密码不同，可以通过环境变量覆盖：
 
@@ -54,6 +57,18 @@ foreach ($file in $sqlFiles) {
 SPRING_DATASOURCE_URL
 SPRING_DATASOURCE_USERNAME
 SPRING_DATASOURCE_PASSWORD
+SPRING_FLYWAY_ENABLED
+```
+
+## 认证安全配置
+
+生产环境必须设置固定的 Token 签名密钥。未设置时系统会生成临时密钥，重启后所有已登录 Token 会失效。
+
+```text
+IIOT_AUTH_TOKEN_SECRET
+IIOT_AUTH_TOKEN_TTL_MINUTES
+IIOT_AUTH_MAX_LOGIN_FAILURES
+IIOT_AUTH_LOCK_MINUTES
 ```
 
 ## 前端

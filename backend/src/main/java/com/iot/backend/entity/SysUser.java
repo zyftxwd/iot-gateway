@@ -24,6 +24,14 @@ public class SysUser {
 
     private String status;
 
+    private Integer failedLoginCount;
+
+    private Long lockUntil;
+
+    private Long lastLoginTime;
+
+    private Long passwordChangedTime;
+
     public Long getUserId() {
         return userId;
     }
@@ -78,5 +86,37 @@ public class SysUser {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Integer getFailedLoginCount() {
+        return failedLoginCount;
+    }
+
+    public void setFailedLoginCount(Integer failedLoginCount) {
+        this.failedLoginCount = failedLoginCount;
+    }
+
+    public Long getLockUntil() {
+        return lockUntil;
+    }
+
+    public void setLockUntil(Long lockUntil) {
+        this.lockUntil = lockUntil;
+    }
+
+    public Long getLastLoginTime() {
+        return lastLoginTime;
+    }
+
+    public void setLastLoginTime(Long lastLoginTime) {
+        this.lastLoginTime = lastLoginTime;
+    }
+
+    public Long getPasswordChangedTime() {
+        return passwordChangedTime;
+    }
+
+    public void setPasswordChangedTime(Long passwordChangedTime) {
+        this.passwordChangedTime = passwordChangedTime;
     }
 }

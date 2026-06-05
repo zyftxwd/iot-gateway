@@ -2,6 +2,7 @@ package com.iot.backend.dto;
 
 public class LoginResponse {
     private String token;
+    private Long expiresAt;
     private CurrentUserInfo user;
 
     public String getToken() {
@@ -10,6 +11,14 @@ public class LoginResponse {
 
     public void setToken(String token) {
         this.token = token;
+    }
+
+    public Long getExpiresAt() {
+        return expiresAt;
+    }
+
+    public void setExpiresAt(Long expiresAt) {
+        this.expiresAt = expiresAt;
     }
 
     public CurrentUserInfo getUser() {

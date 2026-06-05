@@ -122,21 +122,24 @@ git --version
 backend/src/main/resources/application.yml
 ```
 
-创建数据库并导入表结构：
+创建空数据库：
 
 ```powershell
 cd C:\path\to\iot-gateway
 mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS iiot_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-
-$sqlFiles = Get-ChildItem .\backend\docs\sql\*.sql | Sort-Object Name
-foreach ($file in $sqlFiles) {
-  Get-Content $file.FullName -Raw | mysql -uroot -proot --default-character-set=utf8mb4 iiot_db
-}
 ```
 
 如果你的 MySQL 密码不是 `root`，把命令里的 `-proot` 改成自己的密码，例如 `-p你的密码`。
 
 如果 PowerShell 提示 `mysql` 不是可识别命令，需要把 MySQL 的 `bin` 目录加入系统环境变量 `PATH`，例如 `C:\Program Files\MySQL\MySQL Server 8.0\bin`。
+
+后端启动时会通过 Flyway 自动执行数据库迁移脚本：
+
+```text
+backend/src/main/resources/db/migration
+```
+
+已有旧数据库第一次接入 Flyway 时会以 `V12` 作为基线，只执行后续新增迁移，避免重复执行历史 `ALTER TABLE`。
 
 ## 前端启动
 
@@ -185,6 +188,8 @@ http://127.0.0.1:8080/swagger-ui/index.html
 ```text
 admin / 123456
 ```
+
+首次使用默认密码登录后，系统会自动把旧明文密码升级为 BCrypt 哈希。生产环境必须登录后立即修改默认密码，并配置固定的 `IIOT_AUTH_TOKEN_SECRET`。
 
 ## 一键开发启动
 

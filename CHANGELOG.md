@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-06-04 - Reliability and security hardening
+
+### Added
+
+- Added Flyway database migration support.
+- Added versioned migration scripts under `backend/src/main/resources/db/migration`.
+- Added signed API tokens with expiration.
+- Added BCrypt password hashing with automatic legacy plain-text password upgrade on successful login.
+- Added login failure counting and temporary account lockout.
+- Added authentication environment variables for token TTL, token secret, lockout threshold and lockout duration.
+
+### Changed
+
+- User creation and password reset now store hashed passwords.
+- Existing databases are baselined at migration version `V12` to avoid replaying historical manual SQL scripts.
+
 ## 2026-06-04
 
 ### Added

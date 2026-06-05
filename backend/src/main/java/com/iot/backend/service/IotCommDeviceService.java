@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.iot.backend.dto.DeviceFullConfig;
+import com.iot.backend.entity.IotAlarmEvent;
 import com.iot.backend.entity.IotCommDevice;
 import com.iot.backend.entity.IotCommPoint;
+import com.iot.backend.mapper.IotAlarmEventMapper;
 import com.iot.backend.mapper.IotCommDeviceMapper;
 import com.iot.backend.mapper.IotCommPointMapper;
 import com.iot.backend.protocol.ProtocolHandlerFactory;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 设备配置服务。
@@ -28,6 +32,9 @@ public class IotCommDeviceService {
 
     @Autowired
     private IotCommPointMapper pointMapper;
+
+    @Autowired
+    private IotAlarmEventMapper alarmMapper;
 
     @Autowired
     private ProtocolHandlerFactory protocolHandlerFactory;
@@ -95,14 +102,63 @@ public class IotCommDeviceService {
         }
 
         wrapper.orderByDesc("id");
-        return deviceMapper.selectList(wrapper);
+        List<IotCommDevice> devices = deviceMapper.selectList(wrapper);
+        enrichPointCollectAlarmState(devices);
+        return devices;
     }
 
     /**
      * 查询单台设备。
      */
     public IotCommDevice getDevice(Long id) {
-        return deviceMapper.selectById(id);
+        IotCommDevice device = deviceMapper.selectById(id);
+        if (device != null) {
+            enrichPointCollectAlarmState(java.util.Collections.singletonList(device));
+        }
+        return device;
+    }
+
+    private void enrichPointCollectAlarmState(List<IotCommDevice> devices) {
+        if (devices == null || devices.isEmpty()) {
+            return;
+        }
+
+        List<Long> deviceIds = new ArrayList<>();
+        for (IotCommDevice device : devices) {
+            if (device != null && device.getId() != null) {
+                device.setActivePointAlarmCount(0);
+                device.setActivePointAlarmSummary(null);
+                deviceIds.add(device.getId());
+            }
+        }
+        if (deviceIds.isEmpty()) {
+            return;
+        }
+
+        List<IotAlarmEvent> alarms = alarmMapper.selectList(new LambdaQueryWrapper<IotAlarmEvent>()
+                .in(IotAlarmEvent::getDeviceId, deviceIds)
+                .eq(IotAlarmEvent::getAlarmType, "POINT_COLLECT_ERROR")
+                .eq(IotAlarmEvent::getStatus, "ACTIVE"));
+
+        Map<Long, Integer> counts = new HashMap<>();
+        Map<Long, String> summaries = new HashMap<>();
+        for (IotAlarmEvent alarm : alarms) {
+            if (alarm.getDeviceId() == null) {
+                continue;
+            }
+            counts.put(alarm.getDeviceId(), counts.getOrDefault(alarm.getDeviceId(), 0) + 1);
+            if (!summaries.containsKey(alarm.getDeviceId())) {
+                summaries.put(alarm.getDeviceId(), alarm.getMessage());
+            }
+        }
+
+        for (IotCommDevice device : devices) {
+            if (device == null || device.getId() == null) {
+                continue;
+            }
+            device.setActivePointAlarmCount(counts.getOrDefault(device.getId(), 0));
+            device.setActivePointAlarmSummary(summaries.get(device.getId()));
+        }
     }
 
     /**

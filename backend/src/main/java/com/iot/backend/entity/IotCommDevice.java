@@ -1,6 +1,7 @@
 package com.iot.backend.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -30,4 +31,10 @@ public class IotCommDevice {
     private Integer failCount;
     private String extConfig;
     private String remark;
+
+    @TableField(exist = false)
+    private Integer activePointAlarmCount;
+
+    @TableField(exist = false)
+    private String activePointAlarmSummary;
 }

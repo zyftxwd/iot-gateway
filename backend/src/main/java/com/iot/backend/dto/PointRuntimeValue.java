@@ -7,6 +7,9 @@ public class PointRuntimeValue {
     private Object value;
     private Long updateTime;
     private Boolean writable;
+    private String collectStatus;
+    private String collectErrorMessage;
+    private Long collectErrorTime;
 
     public IotCommPoint getPoint() {
         return point;
@@ -38,5 +41,29 @@ public class PointRuntimeValue {
 
     public void setWritable(Boolean writable) {
         this.writable = writable;
+    }
+
+    public String getCollectStatus() {
+        return collectStatus;
+    }
+
+    public void setCollectStatus(String collectStatus) {
+        this.collectStatus = collectStatus;
+    }
+
+    public String getCollectErrorMessage() {
+        return collectErrorMessage;
+    }
+
+    public void setCollectErrorMessage(String collectErrorMessage) {
+        this.collectErrorMessage = collectErrorMessage;
+    }
+
+    public Long getCollectErrorTime() {
+        return collectErrorTime;
+    }
+
+    public void setCollectErrorTime(Long collectErrorTime) {
+        this.collectErrorTime = collectErrorTime;
     }
 }

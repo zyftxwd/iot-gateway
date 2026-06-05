@@ -120,8 +120,15 @@
           </el-table-column>
           <el-table-column prop="status" label="状态" min-width="130" align="center" header-align="center">
             <template #default="{ row }">
-              <span :class="['status-dot', statusClass(row.status)]"></span>
-              <span class="status-text">{{ statusLabel(row.status) }}</span>
+              <div class="status-cell">
+                <span>
+                  <span :class="['status-dot', statusClass(row.status)]"></span>
+                  <span class="status-text">{{ statusLabel(row.status) }}</span>
+                </span>
+                <el-tooltip v-if="hasPointCollectAlarm(row)" :content="row.activePointAlarmSummary || '存在点位采集异常'" placement="top">
+                  <el-tag size="small" type="warning" effect="plain">点位异常 {{ row.activePointAlarmCount }}</el-tag>
+                </el-tooltip>
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="采集周期" min-width="110" align="center" header-align="center">
@@ -198,6 +205,15 @@
                 <template #default="{ row }">
                   <strong class="runtime-value">{{ formatRuntimeValue(row) }}</strong>
                   <span class="muted">{{ row.point.unit || '' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="采集状态" min-width="180">
+                <template #default="{ row }">
+                  <el-tooltip v-if="row.collectStatus === 'ERROR'" :content="row.collectErrorMessage || '点位采集异常'" placement="top">
+                    <el-tag type="danger" effect="plain">异常</el-tag>
+                  </el-tooltip>
+                  <el-tag v-else-if="row.collectStatus === 'NO_DATA'" type="info" effect="plain">暂无数据</el-tag>
+                  <el-tag v-else type="success" effect="plain">正常</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="更新时间" width="180">
@@ -1988,6 +2004,7 @@ const msLabel = (value) => {
   if (ms >= 1000 && ms % 1000 === 0) return `${ms / 1000}秒`
   return `${ms}毫秒`
 }
+const hasPointCollectAlarm = (row) => Number(row?.activePointAlarmCount || 0) > 0
 const statusClass = (status) => status === 'ONLINE' ? 'ok' : status === 'OFFLINE' ? 'bad' : 'warn'
 const statusLabel = (status) => {
   if (status === 'ONLINE') return '在线'
@@ -2383,6 +2400,14 @@ onUnmounted(() => {
 
 .status-text {
   margin-left: 8px;
+}
+
+.status-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .point-drawer {

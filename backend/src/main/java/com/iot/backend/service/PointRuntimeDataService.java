@@ -75,6 +75,7 @@ public class PointRuntimeDataService {
             item.setValue(runtimeValue == null ? null : formatValue(runtimeValue.value, point.getDecimalPlaces()));
             item.setUpdateTime(runtimeValue == null ? null : runtimeValue.updateTime);
             item.setWritable("READ_WRITE".equalsIgnoreCase(point.getAccessMode()));
+            item.setCollectStatus(runtimeValue == null ? "NO_DATA" : "OK");
             result.add(item);
         }
         return result;

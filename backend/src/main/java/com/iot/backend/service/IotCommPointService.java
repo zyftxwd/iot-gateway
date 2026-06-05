@@ -10,8 +10,10 @@ import com.iot.backend.dto.PointImportPreviewResult;
 import com.iot.backend.dto.PointImportPreviewRow;
 import com.iot.backend.dto.PointImportResult;
 import com.iot.backend.dto.PointRuntimeValue;
+import com.iot.backend.entity.IotAlarmEvent;
 import com.iot.backend.entity.IotCommDevice;
 import com.iot.backend.entity.IotCommPoint;
+import com.iot.backend.mapper.IotAlarmEventMapper;
 import com.iot.backend.mapper.IotCommPointMapper;
 import com.iot.backend.protocol.IProtocolHandler;
 import com.iot.backend.protocol.ProtocolBrowseNode;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +35,9 @@ public class IotCommPointService {
 
     @Autowired
     private IotCommPointMapper pointMapper;
+
+    @Autowired
+    private IotAlarmEventMapper alarmMapper;
 
     @Autowired
     private IotCommDeviceService deviceService;
@@ -183,7 +189,43 @@ public class IotCommPointService {
     }
 
     public List<PointRuntimeValue> listRuntimeValues(Long deviceId) {
-        return runtimeDataService.buildRuntimeValues(deviceId, listPoints(deviceId, null));
+        List<PointRuntimeValue> values = runtimeDataService.buildRuntimeValues(deviceId, listPoints(deviceId, null));
+        enrichPointCollectErrors(deviceId, values);
+        return values;
+    }
+
+    private void enrichPointCollectErrors(Long deviceId, List<PointRuntimeValue> values) {
+        if (deviceId == null || values == null || values.isEmpty()) {
+            return;
+        }
+
+        List<IotAlarmEvent> alarms = alarmMapper.selectList(new LambdaQueryWrapper<IotAlarmEvent>()
+                .eq(IotAlarmEvent::getDeviceId, deviceId)
+                .eq(IotAlarmEvent::getAlarmType, "POINT_COLLECT_ERROR")
+                .eq(IotAlarmEvent::getStatus, "ACTIVE"));
+        if (alarms == null || alarms.isEmpty()) {
+            return;
+        }
+
+        Map<Long, IotAlarmEvent> alarmByPointId = new HashMap<>();
+        for (IotAlarmEvent alarm : alarms) {
+            if (alarm.getPointId() != null && !alarmByPointId.containsKey(alarm.getPointId())) {
+                alarmByPointId.put(alarm.getPointId(), alarm);
+            }
+        }
+
+        for (PointRuntimeValue value : values) {
+            if (value == null || value.getPoint() == null || value.getPoint().getId() == null) {
+                continue;
+            }
+            IotAlarmEvent alarm = alarmByPointId.get(value.getPoint().getId());
+            if (alarm == null) {
+                continue;
+            }
+            value.setCollectStatus("ERROR");
+            value.setCollectErrorMessage(alarm.getMessage());
+            value.setCollectErrorTime(alarm.getLastTime());
+        }
     }
 
     public List<IotCommPoint> discoverPoints(Long deviceId) {

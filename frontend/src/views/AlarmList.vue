@@ -26,6 +26,7 @@
         <el-form-item label="报警类型">
           <el-select v-model="filters.alarmType" clearable placeholder="全部类型" @change="loadAlarms">
             <el-option label="点位规则" value="POINT_RULE" />
+            <el-option label="点位采集异常" value="POINT_COLLECT_ERROR" />
             <el-option label="采集异常" value="COLLECT_ERROR" />
           </el-select>
         </el-form-item>
@@ -312,6 +313,7 @@ const formatValue = (row) => {
 
 const alarmTypeLabel = (type) => {
   if (type === 'POINT_RULE') return '点位规则'
+  if (type === 'POINT_COLLECT_ERROR') return '点位采集异常'
   if (type === 'COLLECT_ERROR') return '采集异常'
   return type || '-'
 }

@@ -72,6 +72,7 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
     @Override
     public Map<String, Object> readData(List<IotCommPoint> pointList) {
         Map<String, Object> resultMap = new HashMap<>();
+        Map<String, String> pointErrors = new HashMap<>();
 
         if (master == null || !this.connectedStatus) {
             resultMap.put("status", "offline");
@@ -83,15 +84,17 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
             return resultMap;
         }
 
-        try {
-            Map<GroupKey, List<PointReadPlan>> grouped = groupPoints(pointList);
-            for (Map.Entry<GroupKey, List<PointReadPlan>> entry : grouped.entrySet()) {
-                readGroup(entry.getKey(), entry.getValue(), resultMap);
-            }
-            resultMap.put("status", "online");
-        } catch (Exception e) {
-            System.err.println("Modbus read failed: " + e.getMessage());
-            resultMap.put("status", "error");
+        Map<GroupKey, List<PointReadPlan>> grouped = groupPoints(pointList, pointErrors);
+        for (Map.Entry<GroupKey, List<PointReadPlan>> entry : grouped.entrySet()) {
+            readGroup(entry.getKey(), entry.getValue(), resultMap, pointErrors);
+        }
+
+        int successCount = countReadableValues(pointList, resultMap);
+        resultMap.put("status", "online");
+        resultMap.put("_readSuccessCount", successCount);
+        resultMap.put("_readFailureCount", pointErrors.size());
+        if (!pointErrors.isEmpty()) {
+            resultMap.put("_pointErrors", pointErrors);
         }
 
         return resultMap;
@@ -141,7 +144,7 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
         }
     }
 
-    private Map<GroupKey, List<PointReadPlan>> groupPoints(List<IotCommPoint> pointList) {
+    private Map<GroupKey, List<PointReadPlan>> groupPoints(List<IotCommPoint> pointList, Map<String, String> pointErrors) {
         Map<GroupKey, List<PointReadPlan>> grouped = new TreeMap<>();
 
         for (IotCommPoint point : pointList) {
@@ -149,14 +152,18 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
                 continue;
             }
 
-            int functionCode = defaultFunctionCode(point);
-            int slaveId = point.getSlaveId() == null || point.getSlaveId() <= 0 ? defaultSlaveId : point.getSlaveId();
-            int quantity = defaultQuantity(point);
-            int offset = toProtocolOffset(functionCode, point.getAddress());
+            try {
+                int functionCode = defaultFunctionCode(point);
+                int slaveId = point.getSlaveId() == null || point.getSlaveId() <= 0 ? defaultSlaveId : point.getSlaveId();
+                int quantity = defaultQuantity(point);
+                int offset = toProtocolOffset(functionCode, point.getAddress());
 
-            GroupKey key = new GroupKey(slaveId, functionCode);
-            grouped.computeIfAbsent(key, k -> new ArrayList<>())
-                    .add(new PointReadPlan(point, offset, quantity));
+                GroupKey key = new GroupKey(slaveId, functionCode);
+                grouped.computeIfAbsent(key, k -> new ArrayList<>())
+                        .add(new PointReadPlan(point, offset, quantity));
+            } catch (Exception e) {
+                addPointError(pointErrors, point, "invalid point config: " + e.getMessage());
+            }
         }
 
         for (List<PointReadPlan> plans : grouped.values()) {
@@ -166,18 +173,23 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
         return grouped;
     }
 
-    private void readGroup(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap) throws Exception {
+    private void readGroup(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap, Map<String, String> pointErrors) {
         if (key.functionCode == 1 || key.functionCode == 2) {
-            readBitGroup(key, plans, resultMap);
+            readBitGroup(key, plans, resultMap, pointErrors);
             return;
         }
 
         if (key.functionCode == 3 || key.functionCode == 4) {
-            readRegisterGroup(key, plans, resultMap);
+            readRegisterGroup(key, plans, resultMap, pointErrors);
+            return;
+        }
+
+        for (PointReadPlan plan : plans) {
+            addPointError(pointErrors, plan.point, "unsupported function code: " + key.functionCode);
         }
     }
 
-    private void readBitGroup(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap) throws Exception {
+    private void readBitGroup(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap, Map<String, String> pointErrors) {
         int index = 0;
         while (index < plans.size()) {
             int start = plans.get(index).offset;
@@ -194,21 +206,25 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
                 next++;
             }
 
-            BitVector bits = key.functionCode == 1
-                    ? master.readCoils(key.slaveId, start, end - start + 1)
-                    : master.readInputDiscretes(key.slaveId, start, end - start + 1);
+            try {
+                BitVector bits = key.functionCode == 1
+                        ? master.readCoils(key.slaveId, start, end - start + 1)
+                        : master.readInputDiscretes(key.slaveId, start, end - start + 1);
 
-            for (int i = index; i < next; i++) {
-                PointReadPlan plan = plans.get(i);
-                boolean value = bits.getBit(plan.offset - start);
-                resultMap.put(plan.point.getPointKey(), value);
+                for (int i = index; i < next; i++) {
+                    PointReadPlan plan = plans.get(i);
+                    boolean value = bits.getBit(plan.offset - start);
+                    resultMap.put(plan.point.getPointKey(), value);
+                }
+            } catch (Exception batchError) {
+                readBitPlansIndividually(key, plans.subList(index, next), resultMap, pointErrors);
             }
 
             index = next;
         }
     }
 
-    private void readRegisterGroup(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap) throws Exception {
+    private void readRegisterGroup(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap, Map<String, String> pointErrors) {
         int index = 0;
         while (index < plans.size()) {
             int start = plans.get(index).offset;
@@ -225,18 +241,54 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
                 next++;
             }
 
-            Map<Integer, Integer> registerMap = readRegisters(key, start, end - start + 1);
-            for (int i = index; i < next; i++) {
-                PointReadPlan plan = plans.get(i);
-                int[] values = new int[plan.quantity];
-                for (int j = 0; j < plan.quantity; j++) {
-                    Integer register = registerMap.get(plan.offset + j);
-                    values[j] = register == null ? 0 : register;
+            try {
+                Map<Integer, Integer> registerMap = readRegisters(key, start, end - start + 1);
+                for (int i = index; i < next; i++) {
+                    PointReadPlan plan = plans.get(i);
+                    putParsedRegisterValue(plan, registerMap, resultMap, pointErrors);
                 }
-                resultMap.put(plan.point.getPointKey(), ModbusValueParser.parse(plan.point, values));
+            } catch (Exception batchError) {
+                readRegisterPlansIndividually(key, plans.subList(index, next), resultMap, pointErrors);
             }
 
             index = next;
+        }
+    }
+
+    private void readBitPlansIndividually(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap, Map<String, String> pointErrors) {
+        for (PointReadPlan plan : plans) {
+            try {
+                BitVector bits = key.functionCode == 1
+                        ? master.readCoils(key.slaveId, plan.offset, plan.quantity)
+                        : master.readInputDiscretes(key.slaveId, plan.offset, plan.quantity);
+                resultMap.put(plan.point.getPointKey(), bits.getBit(0));
+            } catch (Exception e) {
+                addPointError(pointErrors, plan.point, "read failed: " + e.getMessage());
+            }
+        }
+    }
+
+    private void readRegisterPlansIndividually(GroupKey key, List<PointReadPlan> plans, Map<String, Object> resultMap, Map<String, String> pointErrors) {
+        for (PointReadPlan plan : plans) {
+            try {
+                Map<Integer, Integer> registerMap = readRegisters(key, plan.offset, plan.quantity);
+                putParsedRegisterValue(plan, registerMap, resultMap, pointErrors);
+            } catch (Exception e) {
+                addPointError(pointErrors, plan.point, "read failed: " + e.getMessage());
+            }
+        }
+    }
+
+    private void putParsedRegisterValue(PointReadPlan plan, Map<Integer, Integer> registerMap, Map<String, Object> resultMap, Map<String, String> pointErrors) {
+        try {
+            int[] values = new int[plan.quantity];
+            for (int j = 0; j < plan.quantity; j++) {
+                Integer register = registerMap.get(plan.offset + j);
+                values[j] = register == null ? 0 : register;
+            }
+            resultMap.put(plan.point.getPointKey(), ModbusValueParser.parse(plan.point, values));
+        } catch (Exception e) {
+            addPointError(pointErrors, plan.point, "parse failed: " + e.getMessage());
         }
     }
 
@@ -310,6 +362,42 @@ public class ModbusProtocolHandlerImpl implements IProtocolHandler {
         }
         String text = String.valueOf(value).trim();
         return "1".equals(text) || "true".equalsIgnoreCase(text) || "on".equalsIgnoreCase(text);
+    }
+
+    private int countReadableValues(List<IotCommPoint> pointList, Map<String, Object> resultMap) {
+        int count = 0;
+        for (IotCommPoint point : pointList) {
+            if (point != null && point.getPointKey() != null && resultMap.containsKey(point.getPointKey())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private void addPointError(Map<String, String> pointErrors, IotCommPoint point, String message) {
+        String key = pointErrorKey(point);
+        String text = message == null ? "read failed" : message;
+        if (text.length() > 200) {
+            text = text.substring(0, 200);
+        }
+        pointErrors.put(key, text);
+        System.err.println("Modbus point read failed [" + key + "]: " + text);
+    }
+
+    private String pointErrorKey(IotCommPoint point) {
+        if (point == null) {
+            return "unknown";
+        }
+        if (point.getPointKey() != null && point.getPointKey().trim().length() > 0) {
+            return point.getPointKey().trim();
+        }
+        if (point.getAddress() != null && point.getAddress().trim().length() > 0) {
+            return point.getAddress().trim();
+        }
+        if (point.getId() != null) {
+            return String.valueOf(point.getId());
+        }
+        return "unknown";
     }
 
     private static class GroupKey implements Comparable<GroupKey> {

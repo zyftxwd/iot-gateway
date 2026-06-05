@@ -9,6 +9,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -41,6 +42,21 @@ public class PointRuntimeDataService {
     public void clearDeviceValues(Long deviceId) {
         if (deviceId != null) {
             latestByDevice.remove(deviceId);
+        }
+    }
+
+    public void clearPointValues(Long deviceId, Set<String> pointKeys) {
+        if (deviceId == null || pointKeys == null || pointKeys.isEmpty()) {
+            return;
+        }
+        Map<String, RuntimeValue> deviceValues = latestByDevice.get(deviceId);
+        if (deviceValues == null) {
+            return;
+        }
+        for (String pointKey : pointKeys) {
+            if (pointKey != null) {
+                deviceValues.remove(pointKey);
+            }
         }
     }
 

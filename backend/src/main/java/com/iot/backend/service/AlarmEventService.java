@@ -18,8 +18,10 @@ import org.springframework.stereotype.Service;
 import java.net.InetAddress;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class AlarmEventService {
@@ -152,6 +154,82 @@ public class AlarmEventService {
         notifyAlarmChanged("RECOVER", existing);
     }
 
+    public void syncPointCollectAlarms(IotCommDevice device, List<IotCommPoint> points, Map<String, String> pointErrors) {
+        if (device == null || device.getId() == null) {
+            return;
+        }
+
+        Map<String, IotCommPoint> pointIndex = buildPointIndex(points);
+        Set<Long> failedPointIds = new HashSet<>();
+        if (pointErrors != null && !pointErrors.isEmpty()) {
+            for (Map.Entry<String, String> entry : pointErrors.entrySet()) {
+                IotCommPoint point = pointIndex.get(normalizeKey(entry.getKey()));
+                if (point == null || point.getId() == null) {
+                    continue;
+                }
+                failedPointIds.add(point.getId());
+                raisePointCollectAlarm(device, point, entry.getValue());
+            }
+        }
+
+        List<IotAlarmEvent> activePointAlarms = alarmMapper.selectList(new LambdaQueryWrapper<IotAlarmEvent>()
+                .eq(IotAlarmEvent::getDeviceId, device.getId())
+                .eq(IotAlarmEvent::getAlarmType, "POINT_COLLECT_ERROR")
+                .eq(IotAlarmEvent::getStatus, "ACTIVE"));
+        long now = System.currentTimeMillis();
+        for (IotAlarmEvent alarm : activePointAlarms) {
+            if (alarm.getPointId() == null || !failedPointIds.contains(alarm.getPointId())) {
+                alarm.setStatus("RECOVERED");
+                alarm.setRecoverTime(now);
+                alarm.setLastTime(now);
+                alarmMapper.updateById(alarm);
+                notifyAlarmChanged("RECOVER", alarm);
+            }
+        }
+    }
+
+    public void raisePointCollectAlarm(IotCommDevice device, IotCommPoint point, String message) {
+        if (device == null || device.getId() == null || point == null || point.getId() == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        IotAlarmEvent existing = alarmMapper.selectOne(new LambdaQueryWrapper<IotAlarmEvent>()
+                .eq(IotAlarmEvent::getDeviceId, device.getId())
+                .eq(IotAlarmEvent::getPointId, point.getId())
+                .eq(IotAlarmEvent::getAlarmType, "POINT_COLLECT_ERROR")
+                .eq(IotAlarmEvent::getStatus, "ACTIVE")
+                .last("LIMIT 1"));
+
+        String detail = buildPointCollectMessage(point, message);
+        if (existing != null) {
+            existing.setLastTime(now);
+            existing.setMessage(limit(detail, 500));
+            existing.setThresholdText(limit(pointAddressText(point), 200));
+            existing.setOccurCount((existing.getOccurCount() == null ? 1 : existing.getOccurCount()) + 1);
+            alarmMapper.updateById(existing);
+            notifyAlarmChanged("UPDATE", existing);
+            return;
+        }
+
+        IotAlarmEvent alarm = new IotAlarmEvent();
+        alarm.setProjectId(device.getProjectId());
+        alarm.setDeviceId(device.getId());
+        alarm.setPointId(point.getId());
+        alarm.setProtocolType(device.getProtocolType());
+        alarm.setAlarmType("POINT_COLLECT_ERROR");
+        alarm.setSeverity("WARN");
+        alarm.setTitle("点位采集异常");
+        alarm.setMessage(limit(detail, 500));
+        alarm.setThresholdText(limit(pointAddressText(point), 200));
+        alarm.setStatus("ACTIVE");
+        alarm.setFirstTime(now);
+        alarm.setLastTime(now);
+        alarm.setOccurCount(1);
+        alarm.setSourceNode(resolveSourceNode());
+        alarmMapper.insert(alarm);
+        notifyAlarmChanged("RAISE", alarm);
+    }
+
     public boolean resolve(Long id) {
         IotAlarmEvent alarm = alarmMapper.selectById(id);
         if (alarm == null) {
@@ -247,6 +325,61 @@ public class AlarmEventService {
             return value.substring(0, maxLength);
         }
         return value.substring(0, maxLength - 3) + "...";
+    }
+
+    private Map<String, IotCommPoint> buildPointIndex(List<IotCommPoint> points) {
+        Map<String, IotCommPoint> index = new HashMap<>();
+        if (points == null) {
+            return index;
+        }
+        for (IotCommPoint point : points) {
+            if (point == null) {
+                continue;
+            }
+            addPointIndex(index, point.getId() == null ? null : String.valueOf(point.getId()), point);
+            addPointIndex(index, point.getPointKey(), point);
+            addPointIndex(index, point.getAddress(), point);
+            addPointIndex(index, point.getPointLabel(), point);
+        }
+        return index;
+    }
+
+    private void addPointIndex(Map<String, IotCommPoint> index, String key, IotCommPoint point) {
+        String normalized = normalizeKey(key);
+        if (normalized.length() > 0 && !index.containsKey(normalized)) {
+            index.put(normalized, point);
+        }
+    }
+
+    private String normalizeKey(String key) {
+        return key == null ? "" : key.trim().toLowerCase();
+    }
+
+    private String buildPointCollectMessage(IotCommPoint point, String message) {
+        String label = firstNonBlank(point.getPointLabel(), point.getPointKey(), point.getAddress(), point.getId() == null ? null : String.valueOf(point.getId()));
+        String detail = firstNonBlank(message, "read failed");
+        return label + " 采集失败：" + detail;
+    }
+
+    private String pointAddressText(IotCommPoint point) {
+        if (point == null) {
+            return null;
+        }
+        return "地址 " + firstNonBlank(point.getAddress(), "-")
+                + " / FC " + (point.getFunctionCode() == null ? "-" : point.getFunctionCode())
+                + " / 从站 " + (point.getSlaveId() == null ? "-" : point.getSlaveId());
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String value : values) {
+            if (value != null && value.trim().length() > 0) {
+                return value.trim();
+            }
+        }
+        return "";
     }
 
     private void notifyAlarmChanged(String action, IotAlarmEvent alarm) {

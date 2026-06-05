@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.net.InetAddress;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -139,6 +140,7 @@ public class GatewayEngineTask {
 
             if (handler.connect(device.getIpAddress(), port, extParams)) {
                 Map<String, Object> deviceData = handler.readData(config.getPoints());
+                Map<String, String> pointErrors = extractPointErrors(deviceData.get("_pointErrors"));
                 String collectStatus = String.valueOf(deviceData.getOrDefault("_collectStatus", deviceData.get("status")));
                 long costMs = System.currentTimeMillis() - startTime;
 
@@ -154,6 +156,16 @@ public class GatewayEngineTask {
                         alarmEventService.recoverDeviceCollectAlarm(device.getId());
                     } catch (Exception alarmError) {
                         System.err.println("recover collect alarm failed, deviceId=" + device.getId() + ", message=" + alarmError.getMessage());
+                    }
+                    try {
+                        alarmEventService.syncPointCollectAlarms(device, config.getPoints(), pointErrors);
+                    } catch (Exception pointAlarmError) {
+                        System.err.println("sync point collect alarms failed, deviceId=" + device.getId() + ", message=" + pointAlarmError.getMessage());
+                    }
+                    try {
+                        runtimeDataService.clearPointValues(device.getId(), failedPointKeys(config.getPoints(), pointErrors));
+                    } catch (Exception runtimeError) {
+                        System.err.println("clear failed point runtime values failed, deviceId=" + device.getId() + ", message=" + runtimeError.getMessage());
                     }
                 }
 
@@ -221,6 +233,59 @@ public class GatewayEngineTask {
             System.err.println("invalid extConfig, fallback to empty params: " + e.getMessage());
             return new HashMap<>();
         }
+    }
+
+    private Map<String, String> extractPointErrors(Object rawErrors) {
+        Map<String, String> errors = new HashMap<>();
+        if (!(rawErrors instanceof Map)) {
+            return errors;
+        }
+
+        Map<?, ?> rawMap = (Map<?, ?>) rawErrors;
+        for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+            if (entry.getKey() == null) {
+                continue;
+            }
+            errors.put(String.valueOf(entry.getKey()), entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+        }
+        return errors;
+    }
+
+    private Set<String> failedPointKeys(List<IotCommPoint> points, Map<String, String> pointErrors) {
+        Set<String> result = new HashSet<>();
+        if (points == null || pointErrors == null || pointErrors.isEmpty()) {
+            return result;
+        }
+
+        Map<String, IotCommPoint> pointIndex = new HashMap<>();
+        for (IotCommPoint point : points) {
+            if (point == null) {
+                continue;
+            }
+            addPointIndex(pointIndex, point.getId() == null ? null : String.valueOf(point.getId()), point);
+            addPointIndex(pointIndex, point.getPointKey(), point);
+            addPointIndex(pointIndex, point.getAddress(), point);
+            addPointIndex(pointIndex, point.getPointLabel(), point);
+        }
+
+        for (String errorKey : pointErrors.keySet()) {
+            IotCommPoint point = pointIndex.get(normalizePointKey(errorKey));
+            if (point != null && point.getPointKey() != null) {
+                result.add(point.getPointKey());
+            }
+        }
+        return result;
+    }
+
+    private void addPointIndex(Map<String, IotCommPoint> pointIndex, String key, IotCommPoint point) {
+        String normalized = normalizePointKey(key);
+        if (normalized.length() > 0 && !pointIndex.containsKey(normalized)) {
+            pointIndex.put(normalized, point);
+        }
+    }
+
+    private String normalizePointKey(String key) {
+        return key == null ? "" : key.trim().toLowerCase();
     }
 
     private int resolvePort(IotCommDevice device) {
